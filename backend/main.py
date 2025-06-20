@@ -15,12 +15,14 @@ Architecture:
 
 import os
 import uvicorn
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
 from loguru import logger
 import time
+import shutil
 
 from api.routes import detection, health
 from core.config import settings
@@ -35,6 +37,37 @@ logger.add(
     format="{time:YYYY-MM-DD HH:mm:ss} | {level} | {name}:{function}:{line} | {message}"
 )
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manage application lifespan - startup and shutdown events."""
+    # Startup
+    logger.info("Sherlock backend starting up...")
+    logger.info(f"Environment: {settings.ENVIRONMENT}")
+    logger.info(f"Models directory: {settings.MODELS_DIR}")
+    
+    # Create necessary directories
+    os.makedirs("logs", exist_ok=True)
+    os.makedirs("uploads", exist_ok=True)
+    os.makedirs("temp", exist_ok=True)
+    
+    # Initialize ML models (if needed)
+    from core.model_manager import ModelManager
+    model_manager = ModelManager()
+    await model_manager.initialize()
+    
+    logger.info("Sherlock backend startup complete!")
+    
+    yield
+    
+    # Shutdown
+    logger.info("Sherlock backend shutting down...")
+    
+    # Cleanup temporary files
+    if os.path.exists("temp"):
+        shutil.rmtree("temp")
+    
+    logger.info("Sherlock backend shutdown complete!")
+
 # Create FastAPI application
 app = FastAPI(
     title="Sherlock API",
@@ -42,7 +75,8 @@ app = FastAPI(
     version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
-    openapi_url="/openapi.json"
+    openapi_url="/openapi.json",
+    lifespan=lifespan
 )
 
 # Add CORS middleware for Flutter app communication
@@ -112,37 +146,6 @@ async def general_exception_handler(request: Request, exc: Exception):
 # Include API routes
 app.include_router(health.router, prefix="/api/v1", tags=["health"])
 app.include_router(detection.router, prefix="/api/v1", tags=["detection"])
-
-@app.on_event("startup")
-async def startup_event():
-    """Initialize application on startup."""
-    logger.info("🚀 Sherlock backend starting up...")
-    logger.info(f"📊 Environment: {settings.ENVIRONMENT}")
-    logger.info(f"🔍 Models directory: {settings.MODELS_DIR}")
-    
-    # Create necessary directories
-    os.makedirs("logs", exist_ok=True)
-    os.makedirs("uploads", exist_ok=True)
-    os.makedirs("temp", exist_ok=True)
-    
-    # Initialize ML models (if needed)
-    from core.model_manager import ModelManager
-    model_manager = ModelManager()
-    await model_manager.initialize()
-    
-    logger.info("✅ Sherlock backend startup complete!")
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Cleanup on application shutdown."""
-    logger.info("🛑 Sherlock backend shutting down...")
-    
-    # Cleanup temporary files
-    import shutil
-    if os.path.exists("temp"):
-        shutil.rmtree("temp")
-    
-    logger.info("✅ Sherlock backend shutdown complete!")
 
 @app.get("/")
 async def root():

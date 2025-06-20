@@ -19,12 +19,14 @@ import 'package:hive_flutter/hive_flutter.dart';
 
 import 'providers/video_upload_provider.dart';
 import 'providers/results_provider.dart';
+import 'providers/history_provider.dart';
 import 'providers/settings_provider.dart';
 import 'screens/home_screen.dart';
 import 'screens/upload_screen.dart';
 import 'screens/results_screen.dart';
 import 'screens/history_screen.dart';
 import 'screens/settings_screen.dart';
+import 'screens/logs_screen.dart';
 import 'utils/constants.dart';
 import 'utils/themes.dart';
 
@@ -64,6 +66,7 @@ class SherlockApp extends StatelessWidget {
         // State management providers
         ChangeNotifierProvider(create: (_) => VideoUploadProvider()),
         ChangeNotifierProvider(create: (_) => ResultsProvider()),
+        ChangeNotifierProvider(create: (_) => HistoryProvider()),
         ChangeNotifierProvider(create: (_) => SettingsProvider()),
       ],
       child: Consumer<SettingsProvider>(
@@ -138,6 +141,13 @@ final GoRouter _router = GoRouter(
       path: '/settings',
       name: 'settings',
       builder: (context, state) => const SettingsScreen(),
+    ),
+    
+    // Logs route
+    GoRoute(
+      path: '/logs',
+      name: 'logs',
+      builder: (context, state) => const LogsScreen(),
     ),
   ],
   

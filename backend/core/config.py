@@ -68,18 +68,21 @@ class Settings(BaseSettings):
     AVAILABLE_MODELS: dict = {
         "xception": {
             "name": "XceptionNet",
+            "type": "xception",
             "description": "High accuracy deepfake detection model",
             "file": "xception_deepfake_detector.pth",
             "input_size": (224, 224),
             "preprocessing": "imagenet"
-        },
-        "mesonet": {
-            "name": "MesoNet",
-            "description": "Lightweight model for real-time inference",
-            "file": "mesonet_deepfake_detector.pth",
-            "input_size": (256, 256),
-            "preprocessing": "custom"
         }
+        # MesoNet temporarily disabled due to checkpoint issues
+        # "mesonet": {
+        #     "name": "MesoNet",
+        #     "type": "mesonet",
+        #     "description": "Lightweight model for real-time inference",
+        #     "file": "mesonet_deepfake_detector.pth",
+        #     "input_size": (256, 256),
+        #     "preprocessing": "custom"
+        # }
     }
     
     # Security settings

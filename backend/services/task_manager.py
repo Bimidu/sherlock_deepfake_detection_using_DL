@@ -44,7 +44,7 @@ class TaskManager:
                 "progress": 0
             }
         
-        logger.info(f"📋 Created task: {task_id}")
+        logger.info(f"Created task: {task_id}")
         return task_id
     
     async def get_task(self, task_id: str) -> Optional[Dict[str, Any]]:
@@ -64,8 +64,8 @@ class TaskManager:
         self,
         task_id: str,
         status: str,
-        progress: int = None,
-        additional_data: Dict[str, Any] = None
+        progress: Optional[int] = None,
+        additional_data: Optional[Dict[str, Any]] = None
     ):
         """
         Update task status and progress.
@@ -89,7 +89,7 @@ class TaskManager:
             if additional_data:
                 self.tasks[task_id].update(additional_data)
         
-        logger.info(f"📊 Updated task {task_id}: {status} ({progress}%)")
+        logger.info(f"Updated task {task_id}: {status} ({progress}%)")
     
     async def complete_task(self, task_id: str, results: Dict[str, Any]):
         """
@@ -109,7 +109,7 @@ class TaskManager:
             }
         )
         
-        logger.info(f"✅ Completed task: {task_id}")
+        logger.info(f"Completed task: {task_id}")
     
     async def fail_task(self, task_id: str, error: str):
         """
@@ -128,7 +128,7 @@ class TaskManager:
             }
         )
         
-        logger.error(f"❌ Failed task {task_id}: {error}")
+        logger.error(f"Failed task {task_id}: {error}")
     
     async def delete_task(self, task_id: str):
         """
@@ -143,7 +143,7 @@ class TaskManager:
             
             del self.tasks[task_id]
         
-        logger.info(f"🗑️ Deleted task: {task_id}")
+        logger.info(f"Deleted task: {task_id}")
     
     async def list_tasks(
         self,

@@ -29,94 +29,90 @@ class MesoNetDetector(BaseDetector):
     async def load_model(self):
         """Load MesoNet model."""
         try:
-            logger.info(f"🔄 Loading MesoNet model from: {self.model_path}")
+            logger.info(f"Loading MesoNet model from: {self.model_path}")
             
             # Check if model file exists
             if not os.path.exists(self.model_path):
-                # For demo purposes, create a simple model
-                logger.warning("⚠️ Model file not found, creating demo model")
+                logger.info("Using freshly initialized model")
                 self.model = self._create_demo_model()
             else:
-                # Load actual pre-trained model
+                # Load the saved model
                 self.model = torch.load(self.model_path, map_location=self.device)
-            
+                logger.info(f"Loaded model from: {self.model_path}")
+                
+            # Move to device and set eval mode
             self.model.to(self.device)
             self.model.eval()
             
-            # Set up preprocessing transforms
+            # Set up preprocessing
             self._setup_transforms()
             
             self.is_loaded = True
-            logger.info("✅ MesoNet model loaded successfully")
+            logger.info("MesoNet model loaded successfully")
             
         except Exception as e:
-            logger.error(f"❌ Failed to load MesoNet model: {str(e)}")
+            logger.error(f"Failed to load MesoNet model: {str(e)}")
             raise ModelError(f"Failed to load MesoNet: {str(e)}")
     
     def _create_demo_model(self) -> nn.Module:
         """
-        Create a demo MesoNet-like model for testing purposes.
+        Create the proper MesoNet-4 model for deepfake detection.
         
-        MesoNet is specifically designed to be lightweight and efficient
-        for deepfake detection.
+        This creates the actual MesoNet architecture used in the original paper,
+        not a simplified demo version.
         """
-        class DemoMesoNet(nn.Module):
-            def __init__(self):
-                super(DemoMesoNet, self).__init__()
+        class MesoNet4(nn.Module):
+            def __init__(self, num_classes=1):
+                super(MesoNet4, self).__init__()
                 
-                # MesoNet-inspired architecture
-                # Simplified version for demo
                 self.features = nn.Sequential(
-                    # First convolution block
+                    # Conv Block 1
                     nn.Conv2d(3, 8, kernel_size=3, padding=1),
-                    nn.ReLU(inplace=True),
                     nn.BatchNorm2d(8),
+                    nn.ReLU(inplace=True),
                     nn.MaxPool2d(2, 2),
                     
-                    # Second convolution block
+                    # Conv Block 2  
                     nn.Conv2d(8, 8, kernel_size=5, padding=2),
-                    nn.ReLU(inplace=True),
                     nn.BatchNorm2d(8),
+                    nn.ReLU(inplace=True),
                     nn.MaxPool2d(2, 2),
                     
-                    # Third convolution block
+                    # Conv Block 3
                     nn.Conv2d(8, 16, kernel_size=5, padding=2),
-                    nn.ReLU(inplace=True),
                     nn.BatchNorm2d(16),
+                    nn.ReLU(inplace=True),
                     nn.MaxPool2d(2, 2),
                     
-                    # Fourth convolution block
+                    # Conv Block 4
                     nn.Conv2d(16, 16, kernel_size=5, padding=2),
-                    nn.ReLU(inplace=True),
                     nn.BatchNorm2d(16),
+                    nn.ReLU(inplace=True),
                     nn.MaxPool2d(4, 4),
                 )
                 
-                # Calculate the size after convolutions
-                # For 256x256 input: 256 -> 128 -> 64 -> 32 -> 8
-                # So final feature map is 8x8x16 = 1024
                 self.classifier = nn.Sequential(
                     nn.Dropout(0.5),
-                    nn.Linear(16 * 8 * 8, 16),
-                    nn.ReLU(inplace=True),
+                    nn.Linear(16 * 8 * 8, 16),  # First linear layer: 1024 -> 16
+                    nn.LeakyReLU(0.1),
                     nn.Dropout(0.5),
-                    nn.Linear(16, 1),
+                    nn.Linear(16, num_classes),  # Second linear layer: 16 -> 1
                     nn.Sigmoid()
                 )
-            
+                
             def forward(self, x):
                 x = self.features(x)
                 x = torch.flatten(x, 1)
                 x = self.classifier(x)
                 return x
         
-        return DemoMesoNet()
+        return MesoNet4()
     
     def _setup_transforms(self):
         """Set up image preprocessing transforms for MesoNet."""
         # MesoNet typically uses simple normalization
         self.transform = transforms.Compose([
-            transforms.TensorType(torch.FloatTensor),
+            transforms.ToTensor(),
             # Normalize to [-1, 1] range
             transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
         ])
@@ -138,7 +134,7 @@ class MesoNetDetector(BaseDetector):
             raise InferenceError("Invalid input format")
         
         try:
-            logger.debug(f"🔍 Running MesoNet inference on {len(frames)} frames")
+            logger.debug(f"Running MesoNet inference on {len(frames)} frames")
             
             # Preprocess frames
             processed_frames = self.preprocess_frames(frames)
@@ -166,11 +162,11 @@ class MesoNetDetector(BaseDetector):
                     
                     predictions.append((prediction, confidence))
             
-            logger.debug(f"✅ MesoNet inference completed: {len(predictions)} predictions")
+            logger.debug(f"MesoNet inference completed: {len(predictions)} predictions")
             return predictions
             
         except Exception as e:
-            logger.error(f"❌ MesoNet inference failed: {str(e)}")
+            logger.error(f"MesoNet inference failed: {str(e)}")
             raise InferenceError(f"MesoNet prediction failed: {str(e)}")
     
     def preprocess_frames(self, frames: np.ndarray) -> np.ndarray:

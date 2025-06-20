@@ -35,45 +35,38 @@ class ModelManager:
         It's called during application startup.
         """
         if self.initialized:
-            logger.info("🔄 Models already initialized")
+            logger.info("Models already initialized")
             return
         
         async with self._lock:
             if self.initialized:  # Double-check after acquiring lock
                 return
             
-            logger.info("🚀 Initializing model manager...")
+            logger.info("Initializing model manager...")
             
-            # Track successful and failed model loads
-            loaded_models = []
-            failed_models = []
-            
-            for model_name, config in settings.AVAILABLE_MODELS.items():
-                try:
-                    await self._load_model(model_name)
-                    loaded_models.append(model_name)
-                    logger.info(f"✅ Successfully loaded model: {model_name}")
+            try:
+                # Initialize models defined in settings
+                for model_name in settings.AVAILABLE_MODELS.keys():
+                    logger.info(f"Loading model: {model_name}")
                     
-                except Exception as e:
-                    failed_models.append((model_name, str(e)))
-                    logger.warning(f"⚠️ Failed to load model {model_name}: {str(e)}")
-            
-            self.initialized = True
-            
-            # Log summary
-            logger.info(f"📊 Model initialization complete:")
-            logger.info(f"   ✅ Loaded: {len(loaded_models)} models {loaded_models}")
-            logger.info(f"   ❌ Failed: {len(failed_models)} models")
-            
-            if failed_models:
-                for model_name, error in failed_models:
-                    logger.warning(f"   ❌ {model_name}: {error}")
-            
-            # Ensure at least one model is available
-            if not loaded_models:
-                logger.error("❌ No models could be loaded!")
-                # Don't raise exception here to allow API to start
-                # Individual endpoints will handle model unavailability
+                    try:
+                        await self._load_model(model_name)
+                        logger.success(f"Model {model_name} loaded successfully")
+                    except Exception as e:
+                        # Log but continue - don't fail entire initialization for one model
+                        logger.error(f"Failed to load model {model_name}: {str(e)}")
+                        continue
+                
+                if not self.models:
+                    logger.warning("No models loaded successfully")
+                else:
+                    logger.success(f"Model manager initialized with {len(self.models)} models")
+            except Exception as e:
+                logger.error(f"Failed to initialize model manager: {str(e)}")
+                raise ModelError(
+                    "Failed to initialize model manager",
+                    detail={"error": str(e)}
+                )
     
     async def _load_model(self, model_name: str):
         """
@@ -98,10 +91,10 @@ class ModelManager:
             # Store the loaded model
             self.models[model_name] = detector
             
-            logger.debug(f"📦 Loaded model {model_name} from {model_path}")
+            logger.debug(f"Loaded model {model_name} from {model_path}")
             
         except Exception as e:
-            logger.error(f"❌ Failed to load model {model_name}: {str(e)}")
+            logger.error(f"Failed to load model {model_name}: {str(e)}")
             raise ModelError(f"Failed to load {model_name}: {str(e)}")
     
     def _create_detector(
@@ -257,11 +250,11 @@ class ModelManager:
             # Remove existing model if loaded
             if model_name in self.models:
                 del self.models[model_name]
-                logger.info(f"🔄 Removed existing model: {model_name}")
+                logger.info(f"Removed existing model: {model_name}")
             
             # Load the model again
             await self._load_model(model_name)
-            logger.info(f"✅ Reloaded model: {model_name}")
+            logger.info(f"Reloaded model: {model_name}")
     
     def get_default_model(self) -> str:
         """

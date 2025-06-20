@@ -15,6 +15,7 @@ import 'package:video_player/video_player.dart';
 import 'package:logger/logger.dart';
 
 import '../models/upload_result.dart';
+import '../utils/logger_widget.dart';
 import '../services/api_service.dart';
 import '../utils/constants.dart';
 
@@ -31,6 +32,7 @@ enum UploadState {
 enum UploadStatus {
   idle,
   selecting,
+  selected,
   uploading,
   uploaded,
   failed,
@@ -38,7 +40,7 @@ enum UploadStatus {
 
 class VideoUploadProvider extends ChangeNotifier {
   final ApiService _apiService = ApiService();
-  final Logger _logger = Logger();
+  final Logger _logger = UILogger();
 
   // Current state
   UploadState _state = UploadState.initial;
@@ -87,6 +89,8 @@ class VideoUploadProvider extends ChangeNotifier {
         return UploadStatus.idle;
       case UploadState.selecting:
         return UploadStatus.selecting;
+      case UploadState.selected:
+        return UploadStatus.selected;
       case UploadState.uploading:
         return UploadStatus.uploading;
       case UploadState.completed:
@@ -144,7 +148,7 @@ class VideoUploadProvider extends ChangeNotifier {
         return false;
       }
     } catch (e) {
-      _logger.e('Error selecting video file: $e');
+      _logger.e(e.toString());
       _setError('Failed to select video file: ${e.toString()}');
       return false;
     }
@@ -168,7 +172,7 @@ class VideoUploadProvider extends ChangeNotifier {
       _setState(UploadState.selected);
       notifyListeners();
     } catch (e) {
-      _logger.e('Error setting selected file: $e');
+      _logger.e(e.toString());
       _setError('Failed to process selected video file');
     }
   }
@@ -194,7 +198,7 @@ class VideoUploadProvider extends ChangeNotifier {
       
       return true;
     } catch (e) {
-      _logger.e('Error uploading video: $e');
+      _logger.e(e.toString());
       _setError('Upload failed: ${e.toString()}');
       return false;
     }
@@ -279,7 +283,7 @@ class VideoUploadProvider extends ChangeNotifier {
       // For now, return null and handle in UI
       return null;
     } catch (e) {
-      _logger.e('Error getting video thumbnail: $e');
+      _logger.e(e.toString());
       return null;
     }
   }

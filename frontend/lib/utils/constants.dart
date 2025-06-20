@@ -12,15 +12,25 @@ class AppConstants {
   static const String appDescription = 'AI-Powered Deepfake Video Detection';
 
   // API Configuration
+  // IMPORTANT: For mobile simulators/emulators, you need to use your machine's IP address
+  // To find your IP address:
+  // - Mac/Linux: Run "ifconfig | grep 'inet ' | grep -v 127.0.0.1 | head -1"
+  // - Windows: Run "ipconfig" and look for IPv4 Address
+  // 
+  // Platform-specific URLs:
+  // - iOS Simulator: Use your machine's IP address (e.g., http://192.168.1.61:8000)
+  // - Android Emulator: Use http://10.0.2.2:8000 (maps to host machine)
+  // - Physical device: Use your machine's IP address on same network
+  // - Web browser: Use http://localhost:8000
   static const String baseUrl = 'http://localhost:8000';
   static const String apiVersion = '/api/v1';
   
   // API Endpoints
-  static const String uploadEndpoint = '/upload';
-  static const String resultsEndpoint = '/results';
-  static const String healthEndpoint = '/health';
-  static const String modelsEndpoint = '/models';
-  static const String taskEndpoint = '/task';
+  static const String uploadEndpoint = '/api/v1/upload';
+  static const String resultsEndpoint = '/api/v1/results';
+  static const String healthEndpoint = '/api/v1/health';
+  static const String modelsEndpoint = '/api/v1/models';
+  static const String taskEndpoint = '/api/v1/tasks';
 
   // File Constraints
   static const int maxFileSize = 100 * 1024 * 1024; // 100MB
@@ -165,7 +175,37 @@ class EnvironmentConfig {
     } else if (isProduction) {
       return apiUrl; // Use environment variable in production
     } else {
-      return 'http://localhost:8000'; // Testing
+      return 'http://192.168.1.61:8000'; // Testing - use machine IP
     }
   }
-} 
+}
+
+/// Platform-aware API configuration
+class ApiConfig {
+  static List<String> _possibleUrls = [
+    'http://localhost:8000',     // Mac/Windows Desktop - FIRST PRIORITY
+    'http://127.0.0.1:8000',     // Alternative localhost
+    'http://192.168.1.61:8000',  // iOS Simulator / Physical device  
+    'http://10.0.2.2:8000',      // Android Emulator
+  ];
+
+  /// Get the appropriate base URL based on the platform and environment
+  static String getBaseUrl() {
+    // For Mac desktop, return localhost first
+    // The API service will test multiple URLs if this fails
+    return _possibleUrls[0];
+  }
+  
+  /// Get all possible URLs for testing
+  static List<String> getAllPossibleUrls() {
+    return _possibleUrls;
+  }
+  
+  /// Update the URL order based on what works
+  static void setWorkingUrl(String workingUrl) {
+    if (_possibleUrls.contains(workingUrl)) {
+      _possibleUrls.remove(workingUrl);
+      _possibleUrls.insert(0, workingUrl);
+    }
+  }
+}

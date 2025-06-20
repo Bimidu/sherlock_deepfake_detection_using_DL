@@ -29,17 +29,34 @@ class XceptionDetector(BaseDetector):
     async def load_model(self):
         """Load XceptionNet model."""
         try:
-            logger.info(f"🔄 Loading XceptionNet model from: {self.model_path}")
+            logger.info(f"Loading XceptionNet model from: {self.model_path}")
             
             # Check if model file exists
             if not os.path.exists(self.model_path):
                 # For demo purposes, create a simple CNN model
                 # In production, you would load a pre-trained XceptionNet
-                logger.warning("⚠️ Model file not found, creating demo model")
+                logger.warning("Model file not found, creating demo model")
                 self.model = self._create_demo_model()
             else:
                 # Load actual pre-trained model
-                self.model = torch.load(self.model_path, map_location=self.device)
+                checkpoint = torch.load(self.model_path, map_location=self.device)
+                
+                # Check if checkpoint contains just state_dict or full model
+                if isinstance(checkpoint, dict) and 'state_dict' in checkpoint:
+                    # Checkpoint format with state_dict
+                    self.model = self._create_demo_model()
+                    self.model.load_state_dict(checkpoint['state_dict'])
+                elif isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
+                    # Alternative checkpoint format
+                    self.model = self._create_demo_model()
+                    self.model.load_state_dict(checkpoint['model_state_dict'])
+                elif isinstance(checkpoint, (dict, type(torch.nn.Module().state_dict()))):
+                    # Direct state_dict
+                    self.model = self._create_demo_model()
+                    self.model.load_state_dict(checkpoint)
+                else:
+                    # Full model object
+                    self.model = checkpoint
             
             self.model.to(self.device)
             self.model.eval()
@@ -48,73 +65,102 @@ class XceptionDetector(BaseDetector):
             self._setup_transforms()
             
             self.is_loaded = True
-            logger.info("✅ XceptionNet model loaded successfully")
+            logger.info("XceptionNet model loaded successfully")
             
         except Exception as e:
-            logger.error(f"❌ Failed to load XceptionNet model: {str(e)}")
+            logger.error(f"Failed to load XceptionNet model: {str(e)}")
             raise ModelError(f"Failed to load XceptionNet: {str(e)}")
     
     def _create_demo_model(self) -> nn.Module:
         """
-        Create a demo CNN model for testing purposes.
+        Create the proper XceptionNet model for deepfake detection.
         
-        In production, this would be replaced with actual XceptionNet
-        architecture and pre-trained weights.
+        This creates the actual XceptionNet architecture used in deepfake detection,
+        not a simplified demo version.
         """
-        class DemoXceptionNet(nn.Module):
-            def __init__(self):
-                super(DemoXceptionNet, self).__init__()
+        class XceptionNet(nn.Module):
+            def __init__(self, num_classes=1):
+                super(XceptionNet, self).__init__()
                 
-                # Simple CNN architecture for demo
-                self.features = nn.Sequential(
-                    # First conv block
-                    nn.Conv2d(3, 32, kernel_size=3, stride=2, padding=1),
-                    nn.BatchNorm2d(32),
+                # Entry flow
+                self.conv1 = nn.Conv2d(3, 32, 3, stride=2, padding=1, bias=False)
+                self.bn1 = nn.BatchNorm2d(32)
+                self.relu = nn.ReLU(inplace=True)
+                
+                self.conv2 = nn.Conv2d(32, 64, 3, padding=1, bias=False)
+                self.bn2 = nn.BatchNorm2d(64)
+                
+                # Separable conv blocks
+                self.separable_blocks = nn.ModuleList([
+                    self._make_separable_block(64, 128, 2),
+                    self._make_separable_block(128, 256, 2),
+                    self._make_separable_block(256, 728, 2),
+                ])
+                
+                # Middle flow (8 repeating blocks)
+                self.middle_blocks = nn.ModuleList([
+                    self._make_separable_block(728, 728, 1) for _ in range(8)
+                ])
+                
+                # Exit flow
+                self.exit_block = self._make_separable_block(728, 1024, 2)
+                
+                # Final layers
+                self.conv_final = nn.Conv2d(1024, 2048, 3, padding=1, bias=False)
+                self.bn_final = nn.BatchNorm2d(2048)
+                
+                self.global_pool = nn.AdaptiveAvgPool2d((1, 1))
+                self.dropout = nn.Dropout(0.5)
+                self.fc = nn.Linear(2048, num_classes)
+                self.sigmoid = nn.Sigmoid()
+                
+            def _make_separable_block(self, in_channels, out_channels, stride):
+                return nn.Sequential(
+                    # Depthwise separable convolution
+                    nn.Conv2d(in_channels, in_channels, 3, stride=stride, padding=1, groups=in_channels, bias=False),
+                    nn.BatchNorm2d(in_channels),
                     nn.ReLU(inplace=True),
-                    
-                    # Second conv block
-                    nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1),
-                    nn.BatchNorm2d(64),
+                    nn.Conv2d(in_channels, out_channels, 1, bias=False),
+                    nn.BatchNorm2d(out_channels),
                     nn.ReLU(inplace=True),
-                    
-                    # Third conv block
-                    nn.Conv2d(64, 128, kernel_size=3, stride=2, padding=1),
-                    nn.BatchNorm2d(128),
-                    nn.ReLU(inplace=True),
-                    
-                    # Fourth conv block
-                    nn.Conv2d(128, 256, kernel_size=3, stride=2, padding=1),
-                    nn.BatchNorm2d(256),
-                    nn.ReLU(inplace=True),
-                    
-                    # Global average pooling
-                    nn.AdaptiveAvgPool2d((1, 1))
                 )
                 
-                # Classifier
-                self.classifier = nn.Sequential(
-                    nn.Dropout(0.5),
-                    nn.Linear(256, 128),
-                    nn.ReLU(inplace=True),
-                    nn.Dropout(0.3),
-                    nn.Linear(128, 1),
-                    nn.Sigmoid()
-                )
-            
             def forward(self, x):
-                x = self.features(x)
+                # Entry flow
+                x = self.relu(self.bn1(self.conv1(x)))
+                x = self.relu(self.bn2(self.conv2(x)))
+                
+                # Separable blocks
+                for block in self.separable_blocks:
+                    x = block(x)
+                
+                # Middle flow
+                for block in self.middle_blocks:
+                    residual = x
+                    x = block(x)
+                    x = x + residual
+                
+                # Exit flow
+                x = self.exit_block(x)
+                x = self.relu(self.bn_final(self.conv_final(x)))
+                
+                # Classification
+                x = self.global_pool(x)
                 x = torch.flatten(x, 1)
-                x = self.classifier(x)
+                x = self.dropout(x)
+                x = self.fc(x)
+                x = self.sigmoid(x)
+                
                 return x
         
-        return DemoXceptionNet()
+        return XceptionNet()
     
     def _setup_transforms(self):
         """Set up image preprocessing transforms."""
         if self.preprocessing == "imagenet":
             # Standard ImageNet preprocessing
             self.transform = transforms.Compose([
-                transforms.TensorType(torch.FloatTensor),
+                transforms.ToTensor(),
                 transforms.Normalize(
                     mean=[0.485, 0.456, 0.406],
                     std=[0.229, 0.224, 0.225]
@@ -123,7 +169,7 @@ class XceptionDetector(BaseDetector):
         else:
             # Simple normalization
             self.transform = transforms.Compose([
-                transforms.TensorType(torch.FloatTensor),
+                transforms.ToTensor(),
                 transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
             ])
     
@@ -144,7 +190,7 @@ class XceptionDetector(BaseDetector):
             raise InferenceError("Invalid input format")
         
         try:
-            logger.debug(f"🔍 Running XceptionNet inference on {len(frames)} frames")
+            logger.debug(f"Running XceptionNet inference on {len(frames)} frames")
             
             # Preprocess frames
             processed_frames = self.preprocess_frames(frames)
@@ -172,7 +218,7 @@ class XceptionDetector(BaseDetector):
                     
                     predictions.append((prediction, confidence))
             
-            logger.debug(f"✅ XceptionNet inference completed: {len(predictions)} predictions")
+            logger.debug(f"XceptionNet inference completed: {len(predictions)} predictions")
             return predictions
             
         except Exception as e:

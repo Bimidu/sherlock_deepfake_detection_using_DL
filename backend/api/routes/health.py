@@ -8,8 +8,10 @@ application status, dependencies, and system resources.
 import psutil
 import time
 from datetime import datetime
-from fastapi import APIRouter, Depends
-from typing import Dict, Any
+from fastapi import APIRouter, Depends, Query, HTTPException
+from typing import Dict, Any, List
+import os
+from loguru import logger
 
 from core.config import settings
 
@@ -46,7 +48,6 @@ async def detailed_health_check() -> Dict[str, Any]:
     disk = psutil.disk_usage('/')
     
     # Check if models directory exists and has models
-    import os
     models_available = []
     if os.path.exists(settings.MODELS_DIR):
         for model_name, config in settings.AVAILABLE_MODELS.items():
@@ -57,6 +58,27 @@ async def detailed_health_check() -> Dict[str, Any]:
                 "available": os.path.exists(model_path),
                 "path": model_path
             })
+    
+    # Check if required directories exist
+    directories_status = {}
+    for dir_name, dir_path in [
+        ("uploads", settings.UPLOAD_DIR),
+        ("models", settings.MODELS_DIR),
+        ("logs", settings.LOGS_DIR),
+        ("temp", settings.TEMP_DIR)
+    ]:
+        directories_status[dir_name] = {
+            "exists": os.path.exists(dir_path),
+            "path": dir_path
+        }
+    
+    # Check if log file exists and get basic info
+    log_file_path = os.path.join(settings.LOGS_DIR, "sherlock.log")
+    log_status = {
+        "exists": os.path.exists(log_file_path),
+        "path": log_file_path,
+        "size": os.path.getsize(log_file_path) if os.path.exists(log_file_path) else 0
+    }
     
     return {
         "status": "healthy",
@@ -82,15 +104,13 @@ async def detailed_health_check() -> Dict[str, Any]:
             "allowed_extensions": settings.ALLOWED_VIDEO_EXTENSIONS,
             "frame_extraction_rate": settings.FRAME_EXTRACTION_RATE,
             "max_frames_per_video": settings.MAX_FRAMES_PER_VIDEO,
-            "default_model": settings.DEFAULT_MODEL
+            "default_model": settings.DEFAULT_MODEL,
+            "max_concurrent_tasks": settings.MAX_CONCURRENT_TASKS
         },
         "models": models_available,
-        "directories": {
-            "upload_dir": settings.UPLOAD_DIR,
-            "temp_dir": settings.TEMP_DIR,
-            "models_dir": settings.MODELS_DIR,
-            "logs_dir": settings.LOGS_DIR
-        }
+        "directories": directories_status,
+        "log_file": log_status,
+        "available_models": list(settings.AVAILABLE_MODELS.keys())
     }
 
 
@@ -114,7 +134,6 @@ async def readiness_check() -> Dict[str, Any]:
     ]
     
     for name, path in directories:
-        import os
         exists = os.path.exists(path)
         checks.append({
             "name": f"{name}_exists",
@@ -159,4 +178,74 @@ async def liveness_check() -> Dict[str, str]:
     return {
         "status": "alive",
         "timestamp": datetime.utcnow().isoformat()
+    }
+
+
+@router.get("/logs")
+async def get_logs(
+    limit: int = Query(default=100, ge=1, le=1000, description="Number of log entries to return"),
+    level: str = Query(default="INFO", description="Minimum log level (DEBUG, INFO, WARNING, ERROR)")
+) -> Dict[str, Any]:
+    """
+    Get recent backend logs for debugging and monitoring.
+    
+    Args:
+        limit: Maximum number of log entries to return
+        level: Minimum log level to include
+        
+    Returns:
+        Dictionary containing log entries
+    """
+    try:
+        log_file_path = os.path.join(settings.LOGS_DIR, "sherlock.log")
+        
+        if not os.path.exists(log_file_path):
+            return {
+                "logs": [],
+                "total_entries": 0,
+                "message": "Log file not found"
+            }
+        
+        # Read the log file
+        logs = []
+        with open(log_file_path, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+            
+        # Parse recent log entries (get last 'limit' lines)
+        recent_lines = lines[-limit:] if len(lines) > limit else lines
+        
+        for line in recent_lines:
+            line = line.strip()
+            if line:
+                # Simple log parsing - in production you might want more sophisticated parsing
+                logs.append({
+                    "timestamp": line.split(" | ")[0] if " | " in line else "",
+                    "level": line.split(" | ")[1] if " | " in line and len(line.split(" | ")) > 1 else "INFO",
+                    "message": " | ".join(line.split(" | ")[3:]) if " | " in line and len(line.split(" | ")) > 3 else line
+                })
+        
+        return {
+            "logs": logs,
+            "total_entries": len(logs),
+            "log_file_size": os.path.getsize(log_file_path),
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to read logs: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to read logs: {str(e)}")
+
+
+@router.get("/version")
+async def get_version() -> Dict[str, str]:
+    """
+    Get application version information.
+    
+    Returns:
+        Dictionary with version info
+    """
+    return {
+        "version": "1.0.0",
+        "api_version": settings.API_V1_STR,
+        "environment": settings.ENVIRONMENT
     } 

@@ -14,7 +14,7 @@ import '../models/upload_result.dart';
 import '../utils/constants.dart';
 
 class ApiService {
-  static const String _baseUrl = AppConstants.baseUrl;
+  static final String _baseUrl = ApiConfig.getBaseUrl();
   static const Duration _timeout = AppConstants.apiTimeout;
 
   /// Upload video file for analysis
@@ -36,7 +36,7 @@ class ApiService {
       
       // Add model parameter if specified
       if (model != null) {
-        request.fields['model'] = model;
+        request.fields['model_name'] = model;
       }
       
       // Set headers
@@ -158,6 +158,38 @@ class ApiService {
     }
   }
 
+  /// Get backend logs for debugging
+  Future<Map<String, dynamic>> getBackendLogs({int limit = 100}) async {
+    try {
+      final baseUrl = ApiConfig.getBaseUrl();
+      final url = Uri.parse('$baseUrl/api/v1/logs?limit=$limit');
+      
+      // Debug logging
+      print('DEBUG: Attempting to connect to: $url');
+      print('DEBUG: Base URL: $baseUrl');
+      
+      final response = await http.get(
+        url,
+        headers: {'Accept': 'application/json'},
+      ).timeout(_timeout);
+      
+      print('DEBUG: Response status code: ${response.statusCode}');
+      
+      if (response.statusCode == 200) {
+        final result = json.decode(response.body);
+        print('DEBUG: Successfully received ${result['total_entries']} log entries');
+        return result;
+      } else {
+        print('DEBUG: HTTP error: ${response.statusCode} - ${response.body}');
+        throw HttpException('Failed to get logs: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('DEBUG: Exception occurred: $e');
+      print('DEBUG: Exception type: ${e.runtimeType}');
+      throw _handleError(e);
+    }
+  }
+
   /// Validate video file before upload
   Future<bool> validateVideoFile(File file) async {
     try {
@@ -213,13 +245,40 @@ class ApiService {
     }
   }
 
-  /// Test connection to the backend
-  Future<bool> testConnection() async {
+  /// Test connection to backend (for debugging)
+  Future<String> testConnection() async {
+    print('DEBUG: Testing all possible backend URLs');
+    
     try {
-      await getHealthStatus();
-      return true;
+      // Test all possible URLs
+      final urls = ApiConfig.getAllPossibleUrls();
+      
+      for (String baseUrl in urls) {
+        final testUrl = '$baseUrl/api/v1/health';
+        try {
+          print('DEBUG: Testing URL: $testUrl');
+          final response = await http.get(
+            Uri.parse(testUrl),
+            headers: {'Accept': 'application/json'},
+          ).timeout(Duration(seconds: 5));
+          
+          if (response.statusCode == 200) {
+            print('DEBUG: SUCCESS with URL: $testUrl');
+            // Update the working URL for future requests
+            ApiConfig.setWorkingUrl(baseUrl);
+            return 'SUCCESS: Connected to $testUrl';
+          } else {
+            print('DEBUG: HTTP ${response.statusCode} for URL: $testUrl');
+          }
+        } catch (e) {
+          print('DEBUG: Failed to connect to $testUrl: $e');
+        }
+      }
+      
+      return 'FAILED: Could not connect to any backend URL';
     } catch (e) {
-      return false;
+      print('DEBUG: Test connection error: $e');
+      return 'ERROR: $e';
     }
   }
 
@@ -236,6 +295,45 @@ class ApiService {
         return json.decode(response.body);
       } else {
         throw HttpException('Failed to get server info: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  /// Get stored results list
+  Future<Map<String, dynamic>> getStoredResults({
+    int limit = 20,
+    int offset = 0,
+  }) async {
+    try {
+      final url = Uri.parse('$_baseUrl/api/v1/stored-results?limit=$limit&offset=$offset');
+      final response = await http.get(
+        url,
+        headers: {'Accept': 'application/json'},
+      ).timeout(_timeout);
+      
+      if (response.statusCode == 200) {
+        return json.decode(response.body);
+      } else {
+        throw HttpException('Failed to get stored results: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  /// Delete a stored result
+  Future<void> deleteStoredResult(String taskId) async {
+    try {
+      final url = Uri.parse('$_baseUrl/api/v1/stored-results/$taskId');
+      final response = await http.delete(
+        url,
+        headers: {'Accept': 'application/json'},
+      ).timeout(_timeout);
+      
+      if (response.statusCode != 200) {
+        throw HttpException('Failed to delete stored result: ${response.statusCode}');
       }
     } catch (e) {
       throw _handleError(e);

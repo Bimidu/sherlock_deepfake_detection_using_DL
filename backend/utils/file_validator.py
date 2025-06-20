@@ -41,7 +41,7 @@ class FileValidator:
         Raises:
             FileUploadError: If validation fails
         """
-        logger.info(f"🔍 Validating file: {file.filename}")
+        logger.info(f"Validating file: {file.filename}")
         
         try:
             # Check if filename exists
@@ -57,13 +57,13 @@ class FileValidator:
             # Validate content type
             self._validate_content_type(file)
             
-            logger.info(f"✅ File validation passed: {file.filename}")
+            logger.info(f"File validation passed: {file.filename}")
             return True
             
         except (FileUploadError, ValidationError):
             raise
         except Exception as e:
-            logger.error(f"❌ File validation error: {str(e)}")
+            logger.error(f"File validation error: {str(e)}")
             raise FileUploadError(f"File validation failed: {str(e)}")
     
     def _validate_extension(self, filename: str):
@@ -85,7 +85,7 @@ class FileValidator:
                 f"Allowed extensions: {allowed_str}"
             )
         
-        logger.debug(f"✅ Extension validation passed: {file_ext}")
+        logger.debug(f"Extension validation passed: {file_ext}")
     
     async def _validate_file_size(self, file: UploadFile):
         """
@@ -115,7 +115,7 @@ class FileValidator:
                 f"Maximum allowed: {max_size_mb:.1f}MB"
             )
         
-        logger.debug(f"✅ Size validation passed: {file_size / (1024 * 1024):.1f}MB")
+        logger.debug(f"Size validation passed: {file_size / (1024 * 1024):.1f}MB")
     
     def _validate_content_type(self, file: UploadFile):
         """
@@ -144,11 +144,11 @@ class FileValidator:
         ]
         
         if content_type and content_type not in allowed_content_types:
-            logger.warning(f"⚠️ Unexpected content type: {content_type}")
+            logger.warning(f"Unexpected content type: {content_type}")
             # Don't fail validation just for content type as it can be unreliable
             # Just log a warning
         
-        logger.debug(f"📄 Content type: {content_type}")
+        logger.debug(f"Content type: {content_type}")
     
     def validate_filename(self, filename: str) -> str:
         """

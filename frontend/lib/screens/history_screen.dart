@@ -6,9 +6,11 @@
  */
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:material_design_icons_flutter/material_design_icons_flutter.dart';
 
+import '../providers/history_provider.dart';
 import '../utils/constants.dart';
 import '../utils/themes.dart';
 
@@ -20,32 +22,13 @@ class HistoryScreen extends StatefulWidget {
 }
 
 class _HistoryScreenState extends State<HistoryScreen> {
-  final List<Map<String, dynamic>> _mockHistory = [
-    {
-      'id': '1a2b3c4d',
-      'filename': 'sample_video.mp4',
-      'result': 'Real',
-      'confidence': 0.89,
-      'createdAt': DateTime.now().subtract(const Duration(hours: 2)),
-      'status': 'completed',
-    },
-    {
-      'id': '5e6f7g8h',
-      'filename': 'test_deepfake.avi',
-      'result': 'AI-Generated',
-      'confidence': 0.93,
-      'createdAt': DateTime.now().subtract(const Duration(days: 1)),
-      'status': 'completed',
-    },
-    {
-      'id': '9i0j1k2l',
-      'filename': 'interview_clip.mov',
-      'result': 'Real',
-      'confidence': 0.76,
-      'createdAt': DateTime.now().subtract(const Duration(days: 3)),
-      'status': 'completed',
-    },
-  ];
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<HistoryProvider>().loadResults(refresh: true);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -58,13 +41,70 @@ class _HistoryScreenState extends State<HistoryScreen> {
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.delete_sweep),
-            onPressed: _showClearHistoryDialog,
-            tooltip: 'Clear History',
+            icon: const Icon(Icons.refresh),
+            onPressed: () => context.read<HistoryProvider>().loadResults(refresh: true),
+            tooltip: 'Refresh',
           ),
         ],
       ),
-      body: _mockHistory.isEmpty ? _buildEmptyState() : _buildHistoryList(),
+      body: Consumer<HistoryProvider>(
+        builder: (context, provider, child) {
+          if (provider.isLoading && provider.results.isEmpty) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          if (provider.error != null && provider.results.isEmpty) {
+            return _buildErrorState(provider);
+          }
+
+          if (provider.isEmpty) {
+            return _buildEmptyState();
+          }
+
+          return _buildHistoryList(provider);
+        },
+      ),
+    );
+  }
+
+  Widget _buildErrorState(HistoryProvider provider) {
+    return Center(
+      child: Card(
+        margin: const EdgeInsets.all(AppConstants.defaultPadding),
+        child: Padding(
+          padding: const EdgeInsets.all(AppConstants.largePadding),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.error_outline,
+                size: 64,
+                color: AppThemes.error,
+              ),
+              const SizedBox(height: AppConstants.defaultPadding),
+              Text(
+                'Error Loading History',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: AppConstants.smallPadding),
+              Text(
+                provider.error ?? 'Unknown error occurred',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: AppConstants.largePadding),
+              ElevatedButton(
+                onPressed: () => provider.retry(),
+                child: const Text('Retry'),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -91,7 +131,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
               ),
               const SizedBox(height: AppConstants.smallPadding),
               Text(
-                'Your past video analyses will appear here.',
+                'Your past video analyses will appear here.\nResults are automatically saved to files.',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
@@ -109,28 +149,43 @@ class _HistoryScreenState extends State<HistoryScreen> {
     );
   }
 
-  Widget _buildHistoryList() {
-    return ListView.builder(
-      padding: const EdgeInsets.all(AppConstants.defaultPadding),
-      itemCount: _mockHistory.length,
-      itemBuilder: (context, index) {
-        final item = _mockHistory[index];
-        return _buildHistoryItem(item);
-      },
+  Widget _buildHistoryList(HistoryProvider provider) {
+    return RefreshIndicator(
+      onRefresh: () => provider.loadResults(refresh: true),
+      child: ListView.builder(
+        padding: const EdgeInsets.all(AppConstants.defaultPadding),
+        itemCount: provider.results.length + (provider.hasMore ? 1 : 0),
+        itemBuilder: (context, index) {
+          // Load more indicator
+          if (index == provider.results.length) {
+            if (provider.isLoading) {
+              return const Padding(
+                padding: EdgeInsets.all(AppConstants.defaultPadding),
+                child: Center(child: CircularProgressIndicator()),
+              );
+            } else {
+              return Padding(
+                padding: const EdgeInsets.all(AppConstants.defaultPadding),
+                child: ElevatedButton(
+                  onPressed: () => provider.loadResults(),
+                  child: const Text('Load More'),
+                ),
+              );
+            }
+          }
+
+          final result = provider.results[index];
+          return _buildHistoryItem(result, provider);
+        },
+      ),
     );
   }
 
-  Widget _buildHistoryItem(Map<String, dynamic> item) {
-    final result = item['result'] as String;
-    final confidence = item['confidence'] as double;
-    final createdAt = item['createdAt'] as DateTime;
-    final filename = item['filename'] as String;
-    final id = item['id'] as String;
-
+  Widget _buildHistoryItem(StoredResult result, HistoryProvider provider) {
     return Card(
       margin: const EdgeInsets.only(bottom: AppConstants.defaultPadding),
       child: InkWell(
-        onTap: () => context.push('/results/$id'),
+        onTap: () => context.push('/results/${result.taskId}'),
         borderRadius: BorderRadius.circular(AppConstants.borderRadius),
         child: Padding(
           padding: const EdgeInsets.all(AppConstants.defaultPadding),
@@ -140,8 +195,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
               Row(
                 children: [
                   Icon(
-                    _getResultIcon(result),
-                    color: AppThemes.getResultColor(result),
+                    _getResultIcon(result.prediction),
+                    color: _getResultColor(result.prediction),
                     size: 24,
                   ),
                   const SizedBox(width: AppConstants.smallPadding),
@@ -150,14 +205,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          filename,
+                          result.filename,
                           style: Theme.of(context).textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.bold,
                           ),
                           overflow: TextOverflow.ellipsis,
                         ),
                         Text(
-                          _formatDateTime(createdAt),
+                          result.formattedTimestamp,
                           style: Theme.of(context).textTheme.bodySmall?.copyWith(
                             color: Theme.of(context).colorScheme.onSurfaceVariant,
                           ),
@@ -165,7 +220,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       ],
                     ),
                   ),
-                  _buildResultChip(result),
+                  _buildResultChip(result.prediction),
                 ],
               ),
               const SizedBox(height: AppConstants.defaultPadding),
@@ -174,21 +229,21 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   Expanded(
                     child: _buildMetric(
                       'Result',
-                      _getResultDisplayText(result),
-                      AppThemes.getResultColor(result),
+                      result.prediction ?? 'Unknown',
+                      _getResultColor(result.prediction),
                     ),
                   ),
                   Expanded(
                     child: _buildMetric(
                       'Confidence',
-                      '${(confidence * 100).toInt()}%',
-                      AppThemes.getConfidenceColor(confidence),
+                      result.confidencePercentage,
+                      _getConfidenceColor(result.confidence),
                     ),
                   ),
                   Expanded(
                     child: _buildMetric(
-                      'ID',
-                      id.substring(0, 8),
+                      'Frames',
+                      '${result.totalFrames}',
                       Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                   ),
@@ -196,18 +251,28 @@ class _HistoryScreenState extends State<HistoryScreen> {
               ),
               const SizedBox(height: AppConstants.smallPadding),
               Row(
-                mainAxisAlignment: MainAxisAlignment.end,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  TextButton.icon(
-                    onPressed: () => context.push('/results/$id'),
-                    icon: const Icon(Icons.visibility, size: 16),
-                    label: const Text('View Details'),
+                  Text(
+                    'ID: ${result.shortTaskId}',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                   ),
-                  IconButton(
-                    onPressed: () => _showDeleteDialog(id),
-                    icon: const Icon(Icons.delete_outline),
-                    tooltip: 'Delete',
-                    color: Theme.of(context).colorScheme.error,
+                  Row(
+                    children: [
+                      TextButton.icon(
+                        onPressed: () => context.push('/results/${result.taskId}'),
+                        icon: const Icon(Icons.visibility, size: 16),
+                        label: const Text('View'),
+                      ),
+                      IconButton(
+                        onPressed: () => _showDeleteDialog(result.taskId, provider),
+                        icon: const Icon(Icons.delete_outline),
+                        tooltip: 'Delete',
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -260,7 +325,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
     );
   }
 
-  void _showDeleteDialog(String id) {
+  void _showDeleteDialog(String id, HistoryProvider provider) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -276,7 +341,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
           TextButton(
             onPressed: () {
               setState(() {
-                _mockHistory.removeWhere((item) => item['id'] == id);
+                provider.deleteResult(id);
               });
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
@@ -286,38 +351,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
               );
             },
             child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showClearHistoryDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Clear All History'),
-        content: const Text(
-          'Are you sure you want to clear all analysis history? This action cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              setState(() {
-                _mockHistory.clear();
-              });
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('History cleared'),
-                ),
-              );
-            },
-            child: const Text('Clear All'),
           ),
         ],
       ),
@@ -336,30 +369,19 @@ class _HistoryScreenState extends State<HistoryScreen> {
     }
   }
 
-  String _getResultDisplayText(String result) {
+  Color _getResultColor(String result) {
     switch (result.toLowerCase()) {
       case 'real':
-        return 'Authentic';
+        return AppThemes.getResultColor(result);
       case 'ai-generated':
       case 'fake':
-        return 'Deepfake';
+        return AppThemes.getResultColor(result);
       default:
-        return 'Unknown';
+        return Theme.of(context).colorScheme.onSurfaceVariant;
     }
   }
 
-  String _formatDateTime(DateTime dateTime) {
-    final now = DateTime.now();
-    final difference = now.difference(dateTime);
-
-    if (difference.inDays > 0) {
-      return '${difference.inDays} days ago';
-    } else if (difference.inHours > 0) {
-      return '${difference.inHours} hours ago';
-    } else if (difference.inMinutes > 0) {
-      return '${difference.inMinutes} minutes ago';
-    } else {
-      return 'Just now';
-    }
+  Color _getConfidenceColor(double confidence) {
+    return AppThemes.getConfidenceColor(confidence);
   }
 } 

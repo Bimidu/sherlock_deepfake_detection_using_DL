@@ -38,6 +38,8 @@ class SettingsScreen extends StatelessWidget {
               const SizedBox(height: AppConstants.defaultPadding),
               _buildPrivacySection(context, settings),
               const SizedBox(height: AppConstants.defaultPadding),
+              _buildDeveloperSection(context),
+              const SizedBox(height: AppConstants.defaultPadding),
               _buildActionsSection(context, settings),
             ],
           );
@@ -334,5 +336,32 @@ class SettingsScreen extends StatelessWidget {
       case ThemeMode.system:
         return 'System Default';
     }
+  }
+  
+  Widget _buildDeveloperSection(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(AppConstants.defaultPadding),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Developer',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: AppConstants.defaultPadding),
+            ListTile(
+              leading: const Icon(Icons.bug_report),
+              title: const Text('View Logs'),
+              subtitle: const Text('See application logs for debugging'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => context.push('/logs'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 } 

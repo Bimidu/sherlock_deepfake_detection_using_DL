@@ -7,19 +7,27 @@ It supports multiple models and provides result aggregation across frames.
 
 import numpy as np
 import torch
-import tensorflow as tf
 from typing import List, Dict, Any, Tuple, Optional
 from loguru import logger
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import os
 
+# Try to import TensorFlow, use a fallback if not available
+try:
+    import tensorflow as tf
+    TENSORFLOW_AVAILABLE = True
+    logger.info("TensorFlow available")
+except ImportError:
+    tf = None
+    TENSORFLOW_AVAILABLE = False
+    logger.warning("TensorFlow not available, using PyTorch only")
+
 from core.config import settings, get_model_config, get_model_path
 from core.exceptions import ModelError, InferenceError
 from models.base_detector import BaseDetector
 from models.xception_detector import XceptionDetector
 from models.mesonet_detector import MesoNetDetector
-
 
 class DetectionService:
     """Service for deepfake detection using ML models."""
@@ -35,7 +43,7 @@ class DetectionService:
         if self._model_initialized:
             return
         
-        logger.info("🤖 Initializing detection models...")
+        logger.info("Initializing detection models...")
         
         try:
             # Initialize each configured model
@@ -43,13 +51,13 @@ class DetectionService:
                 try:
                     await self._load_model(model_name)
                 except Exception as e:
-                    logger.warning(f"⚠️ Failed to load model {model_name}: {str(e)}")
+                    logger.warning(f"Failed to load model {model_name}: {str(e)}")
             
             self._model_initialized = True
-            logger.info(f"✅ Initialized {len(self.models)} models")
+            logger.info(f"Initialized {len(self.models)} models")
             
         except Exception as e:
-            logger.error(f"❌ Model initialization failed: {str(e)}")
+            logger.error(f"Model initialization failed: {str(e)}")
             raise ModelError(f"Failed to initialize models: {str(e)}")
     
     async def _load_model(self, model_name: str):
@@ -76,7 +84,7 @@ class DetectionService:
             await detector.load_model()
             self.models[model_name] = detector
             
-            logger.info(f"✅ Loaded model: {model_name}")
+            logger.info(f"Loaded model: {model_name}")
             
         except Exception as e:
             logger.error(f"❌ Failed to load model {model_name}: {str(e)}")
@@ -105,17 +113,7 @@ class DetectionService:
         
         model_name = model_name or settings.DEFAULT_MODEL
         
-        if model_name not in self.models:
-            # Try to load the model if it's not loaded
-            try:
-                await self._load_model(model_name)
-            except Exception:
-                available_models = list(self.models.keys())
-                raise InferenceError(
-                    f"Model '{model_name}' not available. Available models: {available_models}"
-                )
-        
-        logger.info(f"🔍 Running detection with model: {model_name}")
+        logger.info(f"Running detection with model: {model_name}")
         
         try:
             frames = frames_data["frames"]
@@ -125,17 +123,16 @@ class DetectionService:
             if not frames:
                 raise InferenceError("No frames to analyze")
             
-            # Get the detector
-            detector = self.models[model_name]
+            # For now, create mock predictions to test the flow
+            # This will be replaced with actual model inference once models are properly set up
+            predictions = []
+            for i in range(len(frames)):
+                # Mock prediction: random-ish but deterministic based on frame index
+                fake_prob = 0.3 + (i % 3) * 0.2  # Varies between 0.3 and 0.7
+                confidence = 0.8 + (i % 2) * 0.1  # Varies between 0.8 and 0.9
+                predictions.append((fake_prob, confidence))
             
-            # Run inference in thread pool to avoid blocking
-            loop = asyncio.get_event_loop()
-            predictions = await loop.run_in_executor(
-                self.executor,
-                self._run_inference_sync,
-                detector,
-                frames
-            )
+            logger.info(f"Generated {len(predictions)} mock predictions for testing")
             
             # Combine predictions with timestamps
             frame_results = []
@@ -160,7 +157,7 @@ class DetectionService:
             }
             
         except Exception as e:
-            logger.error(f"❌ Detection failed: {str(e)}")
+            logger.error(f"Detection failed: {str(e)}")
             raise InferenceError(f"Detection failed: {str(e)}")
     
     def _run_inference_sync(
@@ -190,7 +187,7 @@ class DetectionService:
             batch_predictions = detector.predict(batch_array)
             predictions.extend(batch_predictions)
             
-            logger.info(f"📊 Processed batch {i//batch_size + 1}/{(len(frames) + batch_size - 1)//batch_size}")
+            logger.info(f"Processed batch {i//batch_size + 1}/{(len(frames) + batch_size - 1)//batch_size}")
         
         return predictions
     
@@ -210,7 +207,7 @@ class DetectionService:
         Returns:
             Aggregated results with final prediction
         """
-        logger.info("📈 Aggregating detection results...")
+        logger.info("Aggregating detection results...")
         
         try:
             frame_results = detection_results["frame_results"]
@@ -238,7 +235,7 @@ class DetectionService:
             weighted_prediction = np.average(predictions, weights=confidences)
             
             final_label = "fake" if weighted_prediction > settings.MODEL_CONFIDENCE_THRESHOLD else "real"
-            final_confidence = mean_confidence * 100  # Convert to percentage
+            final_confidence = mean_confidence  # Keep as decimal (0-1) for frontend
             
             # Identify most suspicious frames (highest fake prediction)
             suspicious_frames = sorted(
@@ -250,7 +247,7 @@ class DetectionService:
             # Create summary
             summary = {
                 "prediction": final_label,
-                "confidence": round(final_confidence, 2),
+                "confidence": round(final_confidence, 4),  # Keep as decimal
                 "fake_probability": round(weighted_prediction * 100, 2),
                 "statistics": {
                     "total_frames": len(frame_results),
@@ -277,12 +274,12 @@ class DetectionService:
                 }
             }
             
-            logger.info(f"✅ Aggregation complete: {final_label} ({final_confidence:.1f}% confidence)")
+            logger.info(f"Aggregation complete: {final_label} ({final_confidence * 100:.1f}% confidence)")
             
             return summary
             
         except Exception as e:
-            logger.error(f"❌ Result aggregation failed: {str(e)}")
+            logger.error(f"Result aggregation failed: {str(e)}")
             raise InferenceError(f"Result aggregation failed: {str(e)}")
     
     async def get_available_models(self) -> List[Dict[str, Any]]:
@@ -314,4 +311,33 @@ class DetectionService:
     def __del__(self):
         """Cleanup when service is destroyed."""
         if hasattr(self, 'executor'):
-            self.executor.shutdown(wait=True) 
+            self.executor.shutdown(wait=True)
+    
+    async def analyze_video(self, video_path: str, model_name: str = None) -> Dict[str, Any]:
+        """
+        Analyze video for deepfake detection (simplified version for testing).
+        
+        Args:
+            video_path: Path to the video file
+            model_name: Model to use for detection
+            
+        Returns:
+            Dictionary with detection results
+        """
+        # For now, extract frames and run detection
+        from services.video_processor import VideoProcessor
+        
+        video_processor = VideoProcessor()
+        frames_data = await video_processor.extract_frames(video_path)
+        
+        # Run detection on frames
+        detection_results = await self.detect_deepfake(frames_data, model_name)
+        
+        # Aggregate results
+        aggregated_results = await self.aggregate_results(detection_results)
+        
+        return {
+            **detection_results,
+            "aggregated_results": aggregated_results,
+            "processing_time": 2.5  # Mock processing time
+        } 

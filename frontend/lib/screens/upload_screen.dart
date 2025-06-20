@@ -53,6 +53,11 @@ class _UploadScreenState extends State<UploadScreen> {
                 if (uploadProvider.status == UploadStatus.selecting) ...[
                   _buildLoadingIndicator('Selecting file...'),
                 ],
+                if (uploadProvider.status == UploadStatus.selected) ...[
+                  _buildSelectedFileInfo(uploadProvider),
+                  const SizedBox(height: AppConstants.defaultPadding),
+                  _buildUploadButton(uploadProvider),
+                ],
                 if (uploadProvider.status == UploadStatus.uploading) ...[
                   _buildUploadProgress(uploadProvider),
                 ],
@@ -463,6 +468,102 @@ class _UploadScreenState extends State<UploadScreen> {
         ),
       ),
     );
+  }
+
+  Widget _buildSelectedFileInfo(VideoUploadProvider uploadProvider) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(AppConstants.defaultPadding),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.video_file,
+                  color: Theme.of(context).colorScheme.primary,
+                  size: 32,
+                ),
+                const SizedBox(width: AppConstants.defaultPadding),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Selected Video',
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      if (uploadProvider.selectedFileName != null) ...[
+                        Text(
+                          uploadProvider.selectedFileName!,
+                          style: Theme.of(context).textTheme.bodyMedium,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                      if (uploadProvider.selectedFileSize != null) ...[
+                        Text(
+                          uploadProvider.fileSizeFormatted,
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                IconButton(
+                  onPressed: () => uploadProvider.clearSelection(),
+                  icon: const Icon(Icons.close),
+                  tooltip: 'Remove selected file',
+                ),
+              ],
+            ),
+            if (uploadProvider.videoDuration != null) ...[
+              const SizedBox(height: AppConstants.defaultPadding),
+              Row(
+                children: [
+                  Icon(
+                    Icons.access_time,
+                    size: 16,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: AppConstants.smallPadding),
+                  Text(
+                    'Duration: ${_formatDuration(uploadProvider.videoDuration!)}',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildUploadButton(VideoUploadProvider uploadProvider) {
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton.icon(
+        onPressed: uploadProvider.canUpload ? () => uploadProvider.uploadVideo() : null,
+        icon: const Icon(Icons.cloud_upload),
+        label: const Text('Upload & Analyze Video'),
+        style: ElevatedButton.styleFrom(
+          padding: const EdgeInsets.all(AppConstants.defaultPadding),
+          textStyle: Theme.of(context).textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _formatDuration(Duration duration) {
+    final minutes = duration.inMinutes;
+    final seconds = duration.inSeconds % 60;
+    return '${minutes}:${seconds.toString().padLeft(2, '0')}';
   }
 
   Widget _buildUploadError(VideoUploadProvider uploadProvider) {

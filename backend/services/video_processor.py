@@ -44,7 +44,7 @@ class VideoProcessor:
         Raises:
             VideoProcessingError: If video processing fails
         """
-        logger.info(f"📽️ Starting frame extraction from: {video_path}")
+        logger.info(f"Starting frame extraction from: {video_path}")
         
         try:
             # Run frame extraction in thread pool to avoid blocking
@@ -55,11 +55,11 @@ class VideoProcessor:
                 video_path
             )
             
-            logger.info(f"✅ Frame extraction completed: {len(result['frames'])} frames extracted")
+            logger.info(f"Frame extraction completed: {len(result['frames'])} frames extracted")
             return result
             
         except Exception as e:
-            logger.error(f"❌ Frame extraction failed: {str(e)}")
+            logger.error(f"Frame extraction failed: {str(e)}")
             raise VideoProcessingError(f"Failed to extract frames: {str(e)}")
     
     def _extract_frames_sync(self, video_path: str) -> Dict[str, Any]:
@@ -89,7 +89,7 @@ class VideoProcessor:
             width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
             height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
             
-            logger.info(f"📊 Video properties: {width}x{height}, {fps:.2f} FPS, {duration:.2f}s")
+            logger.info(f"Video properties: {width}x{height}, {fps:.2f} FPS, {duration:.2f}s")
             
             # Calculate frame extraction interval
             # Extract one frame per second by default
@@ -110,7 +110,7 @@ class VideoProcessor:
                 if frame_number % frame_interval == 0:
                     # Stop if we've reached the maximum frame limit
                     if extracted_count >= settings.MAX_FRAMES_PER_VIDEO:
-                        logger.info(f"⚠️ Reached maximum frame limit: {settings.MAX_FRAMES_PER_VIDEO}")
+                        logger.info(f"Reached maximum frame limit: {settings.MAX_FRAMES_PER_VIDEO}")
                         break
                     
                     # Preprocess frame
@@ -121,7 +121,7 @@ class VideoProcessor:
                     extracted_count += 1
                     
                     if extracted_count % 10 == 0:
-                        logger.info(f"📷 Extracted {extracted_count} frames...")
+                        logger.info(f"Extracted {extracted_count} frames...")
                 
                 frame_number += 1
             
@@ -192,7 +192,7 @@ class VideoProcessor:
             return info
             
         except Exception as e:
-            logger.error(f"❌ Failed to get video info: {str(e)}")
+            logger.error(f"Failed to get video info: {str(e)}")
             raise VideoProcessingError(f"Failed to analyze video: {str(e)}")
     
     def _get_video_info_sync(self, video_path: str) -> Dict[str, Any]:
